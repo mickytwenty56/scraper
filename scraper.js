@@ -5,7 +5,9 @@ const fs = require("fs");
 const board = "auto";
 
 const url = (board) => {
-  return "https://boards.4channel.org/fit/thread/57745622";
+  return "https://boards.4channel.org/fit/thread/57745622";       // Archived
+  //return "https://boards.4channel.org/fit/thread/17018018";         // Sticky / Closed
+  //return "https://boards.4channel.org/fit/thread/57767764"        // Open
   //return "http://boards.4chan.org/" + board + "/catalog";
 };
 
@@ -16,16 +18,20 @@ const crawlCatalogue = async () => {
     let threadArray = [];
     let threads = await nightmare
       .goto(url(board))
-      .wait("#threads .thread")
       .evaluate(() => {
-        let res_no = parseInt(document.post.elements['resto'].value);
+        //let res_no = parseInt(document.post.elements['resto'].value);
+        let res_no = parseInt(document.getElementsByClassName("thread")[0].id.slice(1));
+        let ts_stats = document.getElementsByClassName("thread-stats")[0].innerHTML;
         let ts_replies = parseInt(document.getElementsByClassName("ts-replies")[0].innerHTML);
         let ts_images = parseInt(document.getElementsByClassName("ts-images")[0].innerHTML);
-        let ts_ips = parseInt(document.getElementsByClassName("ts-ips")[0].innerHTML);
+        let ts_ips = undefined;
+        if (!ts_stats.includes("Archived"))
+          ts_ips = parseInt(document.getElementsByClassName("ts-ips")[0].innerHTML);
         let elements = Array.from(document.getElementsByClassName("postContainer"));
 
         return {
           resno: res_no, 
+          ts_stats: ts_stats, 
           ts_replies: ts_replies,
           ts_images: ts_images, 
           ts_ips: ts_ips, 
@@ -45,6 +51,11 @@ const crawlCatalogue = async () => {
           threads.replies.map((item) => {
             let $ = cheerio.load(item.content);
             let isOP = $(".sideArrows").length == 0;
+            let isSticky = threads.ts_stats.includes("Sticky") ? 1 : undefined;
+            let isClosed = threads.ts_stats.includes("Closed") ? 1 : undefined;
+            let isArchived = threads.ts_stats.includes("Archived") ? 1: undefined;
+            let uniqueIps = threads.ts_ips;
+
             let resto = 0;
             let filename = $(".file .fileText a").attr("href");
             let fext = "";
@@ -56,8 +67,8 @@ const crawlCatalogue = async () => {
             data = {
               no: parseInt($("input[value=delete]").attr("name")),
               resno: isOP ? 0 : threads.resno,
-              sticky: isOP ? 1 : undefined,      //  ?
-              closed: isOP ? 1 : undefined,      //  ?
+              sticky: isOP ? isSticky : undefined,
+              closed: isOP ? isClosed : undefined,
               now: $("span[class='dateTime']").text(),
               time: $("span[class='dateTime']").attr("data-utc"),
               name: $(".desktop span[class='name']").text(),
@@ -87,9 +98,9 @@ const crawlCatalogue = async () => {
               tag: isOP ? "" : undefined,                // ?
               semantic_url: isOP ? "" : undefined,       // ?
               since4pass: "",         // ?
-              unique_ips: isOP ? threads.ts_ips : undefined,
+              unique_ips: (isOP && !isArchived) ? uniqueIps : undefined,
               m_img: isOP ? "" : undefined,              // ?
-              archived: isOP ? "" : undefined,           // ?
+              archived: isOP ? isArchived : undefined,
               archived_on: isOP ? "" : undefined,        // ?
             };
             return data;
